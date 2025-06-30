@@ -1,6 +1,39 @@
-# FinanceApp MVP - Gestor Financiero Personal
+# FinanceApp MVP
 
-Una aplicación web completa para gestión de costos, inversiones y finanzas personales construida con React, TypeScript y Supabase.
+Una aplicación completa de gestión de finanzas personales construida con React, TypeScript y Supabase.
+
+## Características
+
+- ✅ Autenticación completa con Supabase
+- ✅ Gestión de perfiles de usuario
+- ✅ Dashboard de finanzas personales
+- ✅ Secciones: Cuentas, Inversiones, Estadísticas, Configuración
+- ✅ Interfaz moderna y responsive
+- ✅ Despliegue automático en Vercel
+
+## Tecnologías
+
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+- Supabase (Auth + Database)
+- Vercel (Deployment)
+
+## Configuración
+
+1. Clona el repositorio
+2. Instala dependencias: `npm install`
+3. Configura variables de entorno
+4. Ejecuta: `npm run dev`
+
+## Despliegue
+
+La aplicación está configurada para desplegarse automáticamente en Vercel.
+
+---
+
+**Última actualización:** $(date)
 
 ## 🚀 Características
 
