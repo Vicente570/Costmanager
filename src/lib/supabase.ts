@@ -1,43 +1,59 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Función para crear el cliente de Supabase de manera segura
+function createSupabaseClient(): SupabaseClient | null {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('Missing Supabase environment variables. Supabase client will not be available.');
+    return null;
+  }
+
+  try {
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Persistir sesión en localStorage
+        persistSession: true,
+        // Auto-refresh de tokens
+        autoRefreshToken: true,
+        // Detectar cambios de conectividad
+        detectSessionInUrl: true,
+        // Configuración de storage
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        // Configuración de storage key
+        storageKey: 'supabase-auth-token',
+      },
+      // Configuración de realtime
+      realtime: {
+        // Reconexión automática
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+      // Configuración global
+      global: {
+        // Headers por defecto
+        headers: {
+          'X-Client-Info': 'finance-app-mvp',
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Error creating Supabase client:', error);
+    return null;
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Persistir sesión en localStorage
-    persistSession: true,
-    // Auto-refresh de tokens
-    autoRefreshToken: true,
-    // Detectar cambios de conectividad
-    detectSessionInUrl: true,
-    // Configuración de storage
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    // Configuración de storage key
-    storageKey: 'supabase-auth-token',
-  },
-  // Configuración de realtime
-  realtime: {
-    // Reconexión automática
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-  // Configuración global
-  global: {
-    // Headers por defecto
-    headers: {
-      'X-Client-Info': 'finance-app-mvp',
-    },
-  },
-});
+// Crear el cliente de Supabase
+export const supabase = createSupabaseClient();
 
 // Función para verificar conectividad
 export const checkConnection = async () => {
+  if (!supabase) {
+    return false;
+  }
+  
   try {
     const { data, error } = await supabase.from('user_profiles').select('count').limit(1);
     return !error;
@@ -48,12 +64,26 @@ export const checkConnection = async () => {
 
 // Función para reconectar
 export const reconnect = async () => {
+  if (!supabase) {
+    return false;
+  }
+  
   try {
     await supabase.auth.refreshSession();
     return true;
   } catch {
     return false;
   }
+};
+
+// Función para obtener el cliente de Supabase
+export const getSupabaseClient = () => {
+  return supabase;
+};
+
+// Función para verificar si Supabase está disponible
+export const isSupabaseAvailable = () => {
+  return supabase !== null;
 };
 
 // Tipos para la base de datos

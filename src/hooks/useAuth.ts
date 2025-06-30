@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, UserProfile, checkConnection, reconnect } from '../lib/supabase';
+import { supabase, UserProfile, checkConnection, reconnect, isSupabaseAvailable } from '../lib/supabase';
 
 interface AuthState {
   user: User | null;
@@ -51,6 +51,17 @@ export function useAuth() {
       try {
         console.log('🚀 Initializing auth...');
         
+        // Verificar si Supabase está disponible
+        if (!isSupabaseAvailable()) {
+          console.warn('⚠️ Supabase not available (missing env vars)');
+          setAuthState(prev => ({ 
+            ...prev, 
+            connectionError: true, 
+            loading: false 
+          }));
+          return;
+        }
+        
         // Verificar conectividad primero
         const isConnected = await checkConnection();
         if (!isConnected) {
@@ -77,7 +88,7 @@ export function useAuth() {
         }, 8000);
         
         // Obtener sesión actual
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase!.auth.getSession();
         
         if (sessionError) {
           console.error('❌ Session error:', sessionError);
@@ -102,7 +113,7 @@ export function useAuth() {
           
           try {
             // Cargar perfil con timeout
-            const { data: profile, error: profileError } = await supabase
+            const { data: profile, error: profileError } = await supabase!
               .from('user_profiles')
               .select('*')
               .eq('id', session.user.id)
@@ -217,65 +228,69 @@ export function useAuth() {
     window.addEventListener('online', handleReconnect);
     window.addEventListener('focus', handleReconnect);
 
-    // Auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return;
+    // Auth state listener - solo si Supabase está disponible
+    let subscription: any = null;
+    if (supabase) {
+      const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!mounted) return;
 
-        console.log('🔄 Auth state changed:', event);
+          console.log('🔄 Auth state changed:', event);
 
-        if (event === 'SIGNED_OUT' || !session) {
-          setAuthState({
-            user: null,
-            profile: null,
-            session: null,
-            loading: false,
-            needsProfileSetup: false,
-            connectionError: false
-          });
-        } else if (session?.user) {
-          setAuthState(prev => ({ ...prev, loading: true }));
-          
-          try {
-            // Cargar perfil
-            const { data: profile } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
+          if (event === 'SIGNED_OUT' || !session) {
+            setAuthState({
+              user: null,
+              profile: null,
+              session: null,
+              loading: false,
+              needsProfileSetup: false,
+              connectionError: false
+            });
+          } else if (session?.user) {
+            setAuthState(prev => ({ ...prev, loading: true }));
+            
+            try {
+              // Cargar perfil
+              const { data: profile } = await supabase!
+                .from('user_profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
 
-            if (mounted) {
-              setAuthState({
-                user: session.user,
-                profile: profile || null,
-                session: session,
-                loading: false,
-                needsProfileSetup: !profile,
-                connectionError: false
-              });
-            }
-          } catch (error) {
-            console.error('❌ Profile loading error in listener:', error);
-            if (mounted) {
-              setAuthState({
-                user: session.user,
-                profile: null,
-                session: session,
-                loading: false,
-                needsProfileSetup: true,
-                connectionError: false
-              });
+              if (mounted) {
+                setAuthState({
+                  user: session.user,
+                  profile: profile || null,
+                  session: session,
+                  loading: false,
+                  needsProfileSetup: !profile,
+                  connectionError: false
+                });
+              }
+            } catch (error) {
+              console.error('❌ Profile loading error in listener:', error);
+              if (mounted) {
+                setAuthState({
+                  user: session.user,
+                  profile: null,
+                  session: session,
+                  loading: false,
+                  needsProfileSetup: true,
+                  connectionError: false
+                });
+              }
             }
           }
         }
-      }
-    );
+      );
+      subscription = sub;
+    }
 
     return () => {
       mounted = false;
       if (timeoutId) clearTimeout(timeoutId);
       if (reconnectTimeoutId) clearTimeout(reconnectTimeoutId);
-      subscription.unsubscribe();
+      if (subscription) subscription.unsubscribe();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleReconnect);
       window.removeEventListener('focus', handleReconnect);
@@ -283,6 +298,10 @@ export function useAuth() {
   }, [authState.connectionError]);
 
   const signUp = async (data: SignUpData) => {
+    if (!supabase) {
+      return { success: false, message: 'Supabase no está disponible' };
+    }
+    
     setActionLoading(true);
     try {
       console.log('📝 Signing up user:', data.email);
@@ -342,6 +361,10 @@ export function useAuth() {
   };
 
   const signIn = async (data: SignInData) => {
+    if (!supabase) {
+      return { success: false, message: 'Supabase no está disponible' };
+    }
+    
     setActionLoading(true);
     try {
       console.log('🔑 Signing in user:', data.email);
@@ -366,6 +389,10 @@ export function useAuth() {
   };
 
   const signOut = async () => {
+    if (!supabase) {
+      return { success: false, message: 'Supabase no está disponible' };
+    }
+    
     setActionLoading(true);
     try {
       const { error } = await supabase.auth.signOut();
@@ -384,10 +411,12 @@ export function useAuth() {
   };
 
   const updateProfile = async (updates: Partial<Pick<UserProfile, 'username' | 'alias' | 'age'>>) => {
+    if (!supabase || !authState.user) {
+      return { success: false, message: 'Supabase no está disponible o usuario no autenticado' };
+    }
+    
     setActionLoading(true);
     try {
-      if (!authState.user) throw new Error('No user logged in');
-
       const { error } = await supabase
         .from('user_profiles')
         .update(updates)
@@ -400,10 +429,10 @@ export function useAuth() {
         ...prev,
         profile: prev.profile ? { ...prev.profile, ...updates } : null
       }));
-      
+
       return { success: true, message: 'Perfil actualizado exitosamente' };
     } catch (error: any) {
-      console.error('❌ Profile update error:', error);
+      console.error('❌ Update profile error:', error);
       return { 
         success: false, 
         message: error.message || 'Error al actualizar perfil' 
@@ -414,9 +443,13 @@ export function useAuth() {
   };
 
   const setupProfile = async (data: ProfileSetupData) => {
+    if (!supabase || !authState.user) {
+      return { success: false, message: 'Supabase no está disponible o usuario no autenticado' };
+    }
+    
     setActionLoading(true);
     try {
-      if (!authState.user) throw new Error('No user logged in');
+      console.log('👤 Setting up profile for user:', authState.user.id);
 
       const { error } = await supabase
         .from('user_profiles')
@@ -444,7 +477,8 @@ export function useAuth() {
         profile: newProfile,
         needsProfileSetup: false
       }));
-      
+
+      console.log('✅ Profile setup completed');
       return { success: true, message: 'Perfil configurado exitosamente' };
     } catch (error: any) {
       console.error('❌ Profile setup error:', error);
@@ -457,25 +491,28 @@ export function useAuth() {
     }
   };
 
-  // Función para reconexión manual
   const manualReconnect = async () => {
+    if (!supabase) {
+      return { success: false, message: 'Supabase no está disponible' };
+    }
+    
     setActionLoading(true);
     try {
       console.log('🔄 Manual reconnection attempt...');
       const success = await reconnect();
+      
       if (success) {
-        console.log('✅ Manual reconnection successful');
-        // Reinicializar auth después de reconexión exitosa
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setAuthState(prev => ({ ...prev, loading: true }));
-          // El useEffect se encargará de cargar el perfil
-        }
+        setAuthState(prev => ({ ...prev, connectionError: false }));
+        return { success: true, message: 'Reconexión exitosa' };
+      } else {
+        return { success: false, message: 'No se pudo reconectar' };
       }
-      return { success, message: success ? 'Reconexión exitosa' : 'Error en reconexión' };
     } catch (error: any) {
-      console.error('❌ Manual reconnection error:', error);
-      return { success: false, message: error.message || 'Error en reconexión' };
+      console.error('❌ Manual reconnect error:', error);
+      return { 
+        success: false, 
+        message: error.message || 'Error al reconectar' 
+      };
     } finally {
       setActionLoading(false);
     }
@@ -483,13 +520,12 @@ export function useAuth() {
 
   return {
     ...authState,
+    actionLoading,
     signUp,
     signIn,
     signOut,
     updateProfile,
     setupProfile,
-    manualReconnect,
-    loading: authState.loading || actionLoading, // Combinar ambos estados de carga
-    isAuthenticated: !!authState.user && !!authState.profile && !authState.needsProfileSetup
+    manualReconnect
   };
 }
