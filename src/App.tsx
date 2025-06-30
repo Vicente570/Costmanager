@@ -135,7 +135,9 @@ function AppContent() {
     console.log('🔧 Supabase config check:', { 
       hasUrl: !!import.meta.env.VITE_SUPABASE_URL,
       hasKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-      hasConfig: hasSupabaseConfig 
+      hasConfig: hasSupabaseConfig,
+      url: import.meta.env.VITE_SUPABASE_URL,
+      keyPrefix: import.meta.env.VITE_SUPABASE_ANON_KEY?.substring(0, 20) + '...'
     });
 
     // Mostrar loading solo mientras se verifica auth
